@@ -8,6 +8,7 @@ audiobooks/*
 
 # Ignore virtual environment files
 venv/
+.venv
 __pycache__/
 *.pyc
 *.pyo

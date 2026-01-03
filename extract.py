@@ -6,9 +6,16 @@ import zipfile
 import tempfile
 import time
 import unicodedata # For normalization
-from bs4 import BeautifulSoup # For improved EPUB parsing
+from bs4 import BeautifulSoup # For improved EPUB parsing and HTML extraction
 from num2words import num2words
 import traceback # For detailed error logging if needed
+import pytesseract as tess # image pdfs
+import cv2 ### image pdfs
+from pdf2image import convert_from_path #### image pdfs
+import tika # epubs
+from tika import parser ## epubs
+import numpy as np
+import pymupdf
 
 # --- Configuration ---
 HEADER_THRESHOLD = 50 # Pixels from top to ignore
@@ -261,6 +268,70 @@ def extract_pdf_text_by_page(doc):
         page_text = "\n".join(filtered_lines) # Join blocks with newline for structure within page
         all_pages_text.append(page_text)
     return all_pages_text
+
+def get_pdf_type(file_path):
+    result = {
+        'is_scanned': False,
+        'confidence': 'Low',
+        'details': {}
+    }
+    try:
+        doc = pymupdf.open(file_path)
+        # Analyze first page (or more pages for better accuracy)
+        page = doc[0]
+        # Method 1: Check for text
+        sentences = page.get_text().splitlines()
+        text = ". ".join([s for s in sentences if all(["copywrite" not in s, "permission" not in s, "reproduce" not in s])])
+        result['details']['text_length'] = len(text)
+        # Method 2: Check for images
+        image_list = page.get_images()
+        result['details']['image_count'] = len(image_list)
+        # Method 3: Check for fonts
+        fonts = page.get_fonts()
+        result['details']['font_count'] = len(fonts)
+        # Analysis logic
+        if len(text) < 10 and len(image_list) > 0:
+            # If page has almost no text but has images, likely scanned
+            result['is_scanned'] = True
+            result['confidence'] = 'High'
+        elif len(fonts) == 0 and len(image_list) > 0:
+            # No fonts but has images, likely scanned
+            result['is_scanned'] = True
+            result['confidence'] = 'High'
+        elif len(text) > 100 and len(fonts) > 0:
+            # Substantial text and fonts present, likely native
+            result['is_scanned'] = False
+            result['confidence'] = 'High'
+        # Method 4: Check page rotation
+        # Scanned documents often have rotation metadata
+        result['details']['rotation'] = page.rotation
+        if page.rotation != 0 and result['is_scanned']:
+            result['confidence'] = 'High'
+        doc.close()
+    except Exception as e:
+        result['details']['error'] = str(e)
+        result['confidence'] = 'Low'
+    
+    return result
+
+def scanned_pdf(path):
+    pages = convert_from_path(path, dpi=300, use_pdftocairo=True)
+    out = []
+    for page in pages:
+        # Convert the page to a NumPy array
+        page_np = np.array(page)  # Correctly convert PpmImageFile to NumPy array
+        height, width = page_np.shape[:2]
+        cropped_img = page_np[int(height * 0.1):int(height * 0.9), :]  # Crop image
+        gray_img = cv2.cvtColor(cropped_img, cv2.COLOR_RGB2GRAY)  # Convert to grayscale
+        _, binary_img = cv2.threshold(gray_img, 200, 255, cv2.THRESH_BINARY)  # Apply threshold
+        text = tess.image_to_string(binary_img, timeout=30)  # OCR extraction
+        lines = text.splitlines()
+        filtered_lines = [line for line in lines if not line.strip().isdigit() and "copyright" not in line.lower()]
+        filtered_text = " ".join(filtered_lines)
+        out.append(filtered_text)
+    
+    cv2.destroyAllWindows()
+    return ". ".join(out)
 
 # --- TOC and Chapter Structuring ---
 
@@ -649,6 +720,11 @@ def parse_epub_content(epub_path, progress_callback=None):
 
     return chapters
 
+# --- TXT Extraction ---
+def extract_txt(path):
+    with open(path, 'r', encoding="utf-8", errors="ignore") as fin:
+        out = fin.read()
+    return str(out)
 
 # --- Saving Functions ---
 # ... (Keep save_chapters_generic, save_whole_book_text UNCHANGED) ...
@@ -761,6 +837,21 @@ def extract_book(file_path, use_toc=True, extract_mode="chapters", output_dir="e
         if file_ext == '.pdf':
             print("  Processing PDF file...")
             if progress_callback: progress_callback(5)
+
+            pdf_type = get_pdf_type(file_path)
+            print(f"  PDF Type Analysis: Scanned={pdf_type['is_scanned']}")
+
+            if pdf_type['is_scanned']:
+                if progress_callback: progress_callback(30)
+                doc = scanned_pdf(file_path)
+                print("  Performed OCR on scanned PDF.")
+                if progress_callback: progress_callback(70)
+                save_whole_book_text(doc, safe_book_name, absolute_output_dir)
+                if progress_callback: progress_callback(100)
+                elapsed_time = time.time() - start_time
+                print(f"--- Extraction completed in {elapsed_time:.2f} seconds ---")
+                return absolute_output_dir
+
             doc = fitz.open(file_path)
             print(f"  Opened PDF. Pages: {len(doc)}")
 
@@ -840,8 +931,27 @@ def extract_book(file_path, use_toc=True, extract_mode="chapters", output_dir="e
                  else:
                       print("  No EPUB content extracted, nothing to save in whole book mode.")
 
+        elif file_ext == '.txt':
+            print("  Processing TXT file...")
+            txt_content = extract_txt(file_path)
+            if extract_mode == "whole":
+                save_whole_book_text(txt_content, safe_book_name, absolute_output_dir)
+            else:
+                # For TXT in chapter mode, just save as one chapter
+                chapter = {'title': 'Full_Text', 'text': clean_pipeline(txt_content)}
+                save_chapters_generic([chapter], safe_book_name, absolute_output_dir)
+
+        elif file_ext == '.html' or file_ext == '.htm':
+            print("  Processing HTML file...")
+            content = basic_html_to_text(open(file_path, 'r', encoding='utf-8', errors='ignore').read())
+            if extract_mode == "whole":
+                save_whole_book_text(content, safe_book_name, absolute_output_dir)
+            else:
+                chapter = {'title': 'Full_Text', 'text': clean_pipeline(content)}
+                save_chapters_generic([chapter], safe_book_name, absolute_output_dir)
+
         else:
-            raise ValueError(f"Unsupported file format: '{file_ext}'. Supported: .pdf, .epub")
+            raise ValueError(f"Unsupported file format: '{file_ext}'. Supported: .pdf, .epub, .txt, .html, .htm")
 
         elapsed_time = time.time() - start_time
         print(f"--- Extraction completed in {elapsed_time:.2f} seconds ---")

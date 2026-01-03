@@ -98,9 +98,6 @@ sympy==1.13.1
 thinc==8.3.4
 tika>=2.6
 tokenizers==0.21.0
-torch==2.6.0+cu124
-torchaudio==2.6.0+cu124
-torchvision==0.21.0+cu124
 tqdm==4.67.1
 transformers==4.49.0
 ttkbootstrap==1.10.1
