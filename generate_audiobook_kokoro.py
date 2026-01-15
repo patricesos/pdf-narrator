@@ -11,6 +11,10 @@ from kokoro import KPipeline # Assuming KPipeline handles device internally or t
 
 # --- Constants ---
 DEFAULT_SAMPLE_RATE = 24000
+if os.uname().sysname == "Darwin":
+    DEVICE = "cpu" # Default to CPU on macOS for compatibility
+else:
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # --- Helper Functions ---
 
@@ -152,7 +156,7 @@ def generate_audiobooks_kokoro(
     input_dir,
     lang_code,           # Language code for the pipeline (e.g., 'a')
     voice,               # Voice identifier (e.g., "am_liam")
-    device="cuda",       # Device for TTS computation ('cuda' or 'cpu')
+    device=DEVICE,       # Device for TTS computation ('cuda' or 'cpu')
     output_dir=None,     # Optional: Defaults to 'input_dir_audio' sibling folder
     audio_format=".wav", # Output audio format (ensure soundfile supports it)
     speed=1.0,
@@ -189,6 +193,14 @@ def generate_audiobooks_kokoro(
         Exception: For errors during pipeline initialization or processing.
     """
     start_process_time = time.time()
+    # Resolve device: if CUDA requested but not available, fall back to CPU
+    try:
+        if device == "cuda" and not torch.cuda.is_available():
+            print("  Warning: CUDA requested but not available; falling back to CPU.")
+            device = "cpu"
+    except Exception:
+        # If torch is not functional for device checks, default to CPU
+        device = "cpu"
     print(f"\n--- Starting Audiobook Generation Task ---")
     print(f"  Input Directory : '{input_dir}'")
     print(f"  Language / Voice: {lang_code} / {voice}")
@@ -353,7 +365,7 @@ def generate_audio_for_all_voices_kokoro(
     lang_code,           # Language code for the pipeline
     voices,              # List of voice identifiers to test
     output_dir,          # Directory to save test audio files
-    device="cuda",       # Device ('cuda' or 'cpu')
+    device=DEVICE,       # Device ('cuda' or 'cpu')
     speed=1.0,
     split_pattern=r'\n+',
     cancellation_flag=None, # Optional cancellation
@@ -398,6 +410,13 @@ def generate_audio_for_all_voices_kokoro(
     pipeline = None
     try:
         print(f"  Initializing Kokoro pipeline for lang='{lang_code}' on device='{device}'...")
+        # Resolve device similarly as above
+        try:
+            if device == "cuda" and not torch.cuda.is_available():
+                print("  Warning: CUDA requested but not available; falling back to CPU.")
+                device = "cpu"
+        except Exception:
+            device = "cpu"
         pipeline = KPipeline(lang_code=lang_code, device=device)
     except Exception as e:
         print(f"  Error initializing Kokoro pipeline: {e}")
@@ -488,7 +507,7 @@ def test_single_voice_kokoro(
     voice,               # Voice identifier
     output_path,         # Full path for the output audio file
     lang_code="a",       # Language code (must match voice)
-    device="cuda",       # Device ('cuda' or 'cpu')
+    device=DEVICE,       # Device ('cuda' or 'cpu')
     speed=1.0,
     split_pattern=r'\n+',
     cancellation_flag=None,
@@ -539,6 +558,12 @@ def test_single_voice_kokoro(
         pipeline = None
         try:
             print(f"  Initializing Kokoro pipeline...")
+            try:
+                if device == "cuda" and not torch.cuda.is_available():
+                    print("  Warning: CUDA requested but not available; falling back to CPU.")
+                    device = "cpu"
+            except Exception:
+                device = "cpu"
             pipeline = KPipeline(lang_code=lang_code, device=device)
         except Exception as e:
             print(f"  Error initializing Kokoro pipeline: {e}")

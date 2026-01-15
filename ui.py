@@ -226,7 +226,7 @@ class SourceFrame(tb.Frame):
         if mode == "single":
             path, _ = QFileDialog.getOpenFileName(
                 None, "Select Book File", PROJECT_DIR,
-                "Book Files (*.pdf *.epub);;All Files (*.*)"
+                "Book Files (*.pdf *.epub *.txt *.html *.htm);;All Files (*.*)"
             )
             if path: self.pdf_path.set(path)
         elif mode == "batch":
@@ -304,7 +304,14 @@ class AudioFrame(tb.Frame):
         self.chunk_size_display = tk.StringVar(value="510 (Small)") # For combobox
         self.audio_format = tk.StringVar(value=".wav")
         self.audio_format_display = tk.StringVar(value=".wav (High Quality)") # For combobox
-        self.device = tk.StringVar(value="cuda") # Default to GPU if available
+        # Detect CUDA availability at runtime; default to CPU on macOS/where CUDA isn't available
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+        except Exception:
+            cuda_available = False
+        default_device = "cuda" if cuda_available else "cpu"
+        self.device = tk.StringVar(value=default_device)
         self.audio_output_dir = tk.StringVar() # Display only, set by app
 
         self.grid_columnconfigure(1, weight=1)
@@ -362,7 +369,12 @@ class AudioFrame(tb.Frame):
         self.gpu_rb.pack(side=LEFT, padx=(0, 15))
         self.cpu_rb = tb.Radiobutton(device_frame, text="CPU", variable=self.device, value="cpu")
         self.cpu_rb.pack(side=LEFT)
-        # Maybe add a check here for CUDA availability and disable GPU if not found
+        # Disable GPU option if CUDA is not available
+        if not cuda_available:
+            try:
+                self.gpu_rb.config(state=DISABLED)
+            except Exception:
+                pass
 
         # --- Output Directory Display ---
         out_lf = tb.Labelframe(self, text="Audiobook Output (Preview)", padding=15, bootstyle=SECONDARY)
@@ -1206,10 +1218,10 @@ class AudiobookApp(tb.Window):
                     book_files = []
                     for root, _, files in os.walk(source_folder):
                         for file in files:
-                            if file.lower().endswith(('.pdf', '.epub')):
+                            if file.lower().endswith(('.pdf', '.epub', '.txt', '.html', '.htm')):
                                 book_files.append(os.path.join(root, file))
 
-                    if not book_files: raise FileNotFoundError("No PDF/EPUB files found in batch folder.")
+                    if not book_files: raise FileNotFoundError("No PDF/EPUB/TXT/HTML files found in batch folder.")
                     total_files = len(book_files)
                     print(f"Found {total_files} book files for batch processing.")
 

@@ -65,7 +65,8 @@ https://github.com/user-attachments/assets/b9d87ed4-3458-4116-accf-0816ec1448b2
 
 ---
 
-## Installation
+## Installation 
+> ARM64 MacOS users see the section below
 
 1. **Clone the Repository**
    ```bash
@@ -86,6 +87,26 @@ https://github.com/user-attachments/assets/b9d87ed4-3458-4116-accf-0816ec1448b2
    ```bash
    pip install --upgrade pip
    pip install -r requirements.txt
+   ```
+
+---
+
+## Installation for ARM64 MacOS Users
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/mateogon/pdf-narrator.git
+   cd pdf-narrator
+   ```
+
+2. **Run the Setup Script to Download Dependencies**
+   ```bash
+   chmod +x scripts/setup_macos_arm64.sh
+   ./scripts/setup_macos_arm64.sh
+   ```
+
+3. **Create and Activate the Conda Virtual Environment**
+   ```bash
+   source "$HOME/miniforge3/bin/activate" && conda activate pdf-narrator
    ```
 
 ---
