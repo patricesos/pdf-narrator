@@ -17,7 +17,6 @@ csvw==3.5.1
 curated-tokenizers==0.0.9
 curated-transformers==0.1.1
 cymem==2.0.11
-deepspeed==0.16.1
 dlinfo==2.0.0
 docopt==0.6.2
 einops==0.8.1
@@ -98,9 +97,6 @@ sympy==1.13.1
 thinc==8.3.4
 tika>=2.6
 tokenizers==0.21.0
-torch==2.6.0+cu124
-torchaudio==2.6.0+cu124
-torchvision==0.21.0+cu124
 tqdm==4.67.1
 transformers==4.49.0
 ttkbootstrap==1.10.1

@@ -50,3 +50,5 @@ voice_tests/*
 
 # Ignore the temporary folder used for voice tests
 voice_test_temp/
+
+test/*
